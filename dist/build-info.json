@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0-rc.1",
+  "three": "r140",
+  "offlineSHA256": "4b874abc501bb50d7b221b44aac96cc2ffa486eb7b6ae715d8b183cf55ce7a34",
+  "sourceSHA256": {
+    "engine": "6feb6a5bd1f718a798bef7b3ab826029a9463fab16919f9f5815084a2d949a80",
+    "levels": "679249a2703ab57250a22fbf95efa3d4ae46c0cac06096290509f6f034d1d0dc",
+    "storage": "bf5952e98baeeb9ead9ed78e1239ae4c3d8b7dd8ec375bbddfcb9653f4bb42dc",
+    "audio": "584565e737a953ddc740e4860009f6072b44976d4ffce83a929238ee54c03b23",
+    "legacy": "5c9cb441cc1bf6fc126c26eb2a1f13fb6727da4a81aa81d1ba4e24201a17ae62",
+    "kernel": "dd68032b78584f2bb719fcdeeff3bf35c867047023ebfafc2a1ed687aa7ec56a",
+    "software": "6608895a4c3f346cbe8e78eedead3afd287537d08e4f31263dfe0473c7e9d55c",
+    "scene": "77ad3ce8a6fb64b8658c0cad44c14a57a99a2cccbc4932e8ef2ba272f58d6000",
+    "main": "7c486bc58ace48fad2e494e06e96df86a416adb184387803db0ff95a2c4c5f4b"
+  }
+}

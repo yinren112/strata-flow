@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101a17"><meta name="description" content="流层 STRATA：在透明机柜里连接不同液体，利用楼层绕过障碍，探索重力与泵的三维管路益智游戏。离线、无广告、无倒计时。">
+  <title>流层 STRATA — 让思路，立体流动。</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <div id="app" class="mode-home">
+    <header class="topbar">
+      <button class="brand" data-action="home" aria-label="流层 STRATA 首页">
+        <svg viewBox="0 0 38 38" aria-hidden="true"><path d="M9 6v19a7 7 0 0 0 14 0V13a5 5 0 0 1 10 0v18M3 7v18a13 13 0 0 0 26 0V13"/></svg>
+        <span>STRATA<span class="brand-cn">流层</span></span>
+      </button>
+      <nav class="topnav" aria-label="主导航">
+        <button data-action="levels">关卡图鉴</button><button data-action="workshop">自由实验</button><button data-action="daily">每日一流<span class="new-dot"></span></button>
+      </nav>
+      <div class="top-tools"><button class="showcase-button" data-action="presentation" aria-label="进入装置展示模式"><span>◈</span> 装置展示</button><span class="quiet-label">ENGINEERED TO FLOW.</span><button class="icon-button" data-action="sound" id="sound-button" aria-label="关闭声音"></button><button class="icon-button" data-action="help" aria-label="玩法说明" title="玩法说明">?</button><button class="icon-button" data-action="settings" id="settings-button" aria-label="设置"></button></div>
+    </header>
+    <main class="workspace">
+      <section class="home-intro" aria-labelledby="hero-title">
+        <div class="eyebrow"><span class="green-dot"></span> 空间流体实验室 <span class="mono">/ ATELIER 02</span></div>
+        <p class="hero-overline">The art of finding a way.</p><h1 id="hero-title">让思路，<br><span>立体流动。</span></h1>
+        <p class="hero-copy">平面走不通，就换一个维度。<br>转动一座精密的流体装置，<br>让每一股液体，找到自己的路。</p>
+        <div class="hero-actions"><button class="primary" data-action="continue" id="continue-button">开始流动 <span>↗</span></button><button class="text-button" data-action="levels">探索关卡 <span>→</span></button></div>
+        <div class="hero-metrics"><div><strong>24<span>个</span></strong><small>渐进关卡</small></div><div><strong>3<span>D</span></strong><small>立体思考</small></div><div><strong>∞</strong><small>不限时探索</small></div></div>
+        <div class="home-bottom"><span class="tiny-squares"><i></i><i></i><i></i></span><p>不争分秒，只找一条更好的路。<br><span>离线可玩 · 本地存档 · 无广告</span></p></div>
+      </section>
+      <aside class="sidebar" aria-label="实验状态">
+        <div class="sidebar-top"><button class="back-link" data-action="levels">← 实验目录</button><span id="chapter-label" class="mono"></span></div>
+        <div class="level-number" id="level-number">01<span>/ 24</span></div>
+        <div class="level-title"><h1 id="level-name"></h1><p id="level-subtitle" class="mono"></p></div>
+        <div class="section-caption">液体回路 <span id="circuit-total" class="mono"></span></div>
+        <div id="circuits" class="circuits"></div>
+        <section class="mission"><span class="eyebrow">实验笔记</span><p id="level-tip"></p></section>
+        <div class="side-stats"><div><span>已铺管长</span><strong><span id="length-value">0</span><small> 格</small></strong></div><div><span>参考管长</span><strong><span id="par-value">0</span><small> 格</small></strong></div></div>
+        <div id="pump-box" class="pump-box"></div>
+        <div class="sidebar-foot"><span id="time-value" class="mono">00:00</span><span>从容一点，没有倒计时。</span></div>
+      </aside>
+      <section class="stage" aria-label="三维实验区">
+        <div class="stage-top"><div class="stage-tag"><span class="green-dot"></span><span id="scene-status">LIVE DIORAMA</span></div><span class="mono" id="scene-size">5 × 4 × 5</span></div>
+        <div id="viewport" class="viewport"><div id="render-fallback" hidden><strong>三维画面暂不可用</strong><p>你仍然可以使用楼层布线板完成全部关卡。请检查浏览器硬件加速设置。</p></div></div>
+        <div class="stage-caption"><strong>THE FLOW APPARATUS</strong><span id="apparatus-caption">04 CIRCUITS · INFINITE POSSIBILITIES</span></div><div class="edition-mark">STRATA / ATELIER EDITION — 02</div><div class="scene-layer" id="scene-layer"><span>EDITING LAYER</span><strong>L1</strong><small>/ L2</small></div>
+        <div class="scene-hint" id="scene-hint">拖动旋转 · 滚轮缩放</div>
+        <div class="scene-bottom"><div class="axis-badge" aria-hidden="true"><svg viewBox="0 0 66 52"><path d="M26 28V7M26 28l23 12M26 28L7 39"/><text x="24" y="7">Y</text><text x="51" y="44">X</text><text x="0" y="47">Z</text></svg></div><div class="view-controls"><button class="active" data-view="iso" aria-label="等轴测视图">等轴</button><button data-view="front" aria-label="正面视图">正面</button><button data-view="top" aria-label="俯视视图">俯视</button><button data-view="detail" aria-label="装置细节近景">细节</button><span></span><button data-action="slice" id="slice-button" aria-pressed="false">剖层</button></div><button class="icon-button photo-button" data-action="capture" id="capture-button" title="保存机柜截图" aria-label="保存机柜截图"></button></div>
+        <div class="flow-banner" id="flow-banner" hidden><span class="green-dot"></span><span id="flow-text">液体正在注入…</span><div><i id="flow-progress"></i></div></div>
+      </section>
+      <aside class="inspector" aria-label="楼层布线板">
+        <div class="inspector-heading"><div><span class="eyebrow">ROUTING DESK</span><h2>楼层布线板</h2></div><button class="icon-button" data-action="help" aria-label="如何布线">?</button></div>
+        <div class="mobile-circuits" id="mobile-circuits"></div>
+        <div class="layer-heading"><span>当前楼层</span><span class="mono" id="floor-meta"></span></div>
+        <div id="layer-tabs" class="layer-tabs" aria-label="选择观察楼层"></div>
+        <div class="board-shell"><div class="board-label-x">X →</div><div class="board-label-z">Z ↓</div><div id="board" class="board" aria-label="可点击的楼层格点"></div></div>
+        <div class="board-legend"><span><i class="legend-dot"></i>可接点</span><span><i class="legend-block"></i>设备</span><span><b>↕</b>跨层管</span></div>
+        <div class="elevation-heading"><span>从管路末端跨层</span><span id="head-coord" class="mono"></span></div>
+        <div class="elevation-controls"><button data-action="down" id="down-button">↓ 下降一层 <kbd>Q</kbd></button><button data-action="up" id="up-button">↑ 上升一层 <kbd>E</kbd></button></div>
+        <div class="routing-tip" id="routing-tip">点击相邻格点，或者拖动连续布管。</div>
+        <div class="edit-actions"><button data-action="undo" id="undo-button" title="撤销 Z">↶<span>撤销</span></button><button data-action="redo" id="redo-button" title="重做 Y">↷<span>重做</span></button><button data-action="clear" title="清除当前回路">⌫<span>清除</span></button><button data-action="hint" id="hint-button" title="提示下一格 H">✧<span>提示</span></button></div>
+        <button class="primary run-button" id="run-button" data-action="run"><span class="run-icon">▷</span><span id="run-label">试运行</span><span id="run-count" class="mono">0 / 1</span></button>
+        <div class="under-run"><span id="ready-label">连接全部端口后，让液体流动。</span><button data-action="pause" aria-label="暂停">Ⅱ</button></div>
+      </aside>
+    </main>
+    <footer class="app-footer"><span><i class="save-dot"></i><span id="save-status">离线就绪 · 本地自动保存</span></span><span class="footer-center" id="footer-hint">一种空间思考的练习。</span><button data-action="about">STRATA <span class="mono">ATELIER / 02</span></button></footer>
+  </div>
+  <button class="presentation-exit" data-action="exit-presentation" aria-label="退出装置展示模式">退出展示 ↙</button><button class="presentation-tour" data-action="tour" aria-pressed="false">自动环视</button><div class="presentation-credit"><strong>STRATA</strong><span>THE ART OF ROUTING / ATELIER 02</span></div>
+  <dialog id="modal" aria-labelledby="modal-title"><div class="modal-head"><div><span class="eyebrow" id="modal-kicker">STRATA / 流层</span><h2 id="modal-title"></h2></div><button class="icon-button" data-action="close-modal" aria-label="关闭弹窗">×</button></div><div id="modal-content"></div></dialog>
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <input id="level-file" type="file" accept=".json,application/json" hidden><input id="save-file" type="file" accept=".json,application/json" hidden>
+  <noscript><p>本游戏需要 JavaScript。请在浏览器设置中开启 JavaScript 后刷新。</p></noscript>
+  <script src="./vendor/three.r140.min.js"></script><script type="module" src="./src/main.js"></script>
+</body>
+</html>

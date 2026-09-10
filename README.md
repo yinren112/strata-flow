@@ -4,6 +4,8 @@
 
 ![流层 STRATA 首页](docs/assets/01-home.png)
 
+[在线体验 Demo](https://strata-flow-navy.vercel.app/)
+
 ## 作品截图
 
 <table>

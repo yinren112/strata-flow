@@ -4,6 +4,19 @@
 
 ![流层 STRATA 首页](docs/assets/01-home.png)
 
+## 作品截图
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/02-apparatus-showcase.png" alt="透明机柜装置展陈"><br><sub>装置展陈：四路管线与完整透明机柜</sub></td>
+    <td width="50%"><img src="docs/assets/03-apparatus-detail.png" alt="管路与设备细节"><br><sub>细节视角：弯管、接头、设备与端口标识</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/04-level-atlas.png" alt="24 关关卡图鉴"><br><sub>关卡图鉴：四章、24 个递进实验</sub></td>
+    <td width="50%"><img src="docs/assets/05-gameplay.png" alt="三维布管玩法界面"><br><sub>玩法界面：三维机柜与楼层布线板协同操作</sub></td>
+  </tr>
+</table>
+
 > **版本**：2.0.0 · 完整自包含 3D 益智工程与双渲染管线作品  
 > **交付物**：自包含离线单 HTML、预构建静态站点、自研 C/WASM CPU 软光栅引擎、93 项 Node 自动化测试、54 项 Playwright 浏览器自动化回归。
 

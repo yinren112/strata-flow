@@ -15,9 +15,15 @@ function roundedCurve(points,r=.255){
     const enter=p.clone().addScaledVector(a,-r),leave=p.clone().addScaledVector(b,r);path.add(new T.LineCurve3(last,enter));path.add(new T.QuadraticBezierCurve3(enter,p,leave));last=leave;
   }path.add(new T.LineCurve3(last,points.at(-1)));return path;
 }
-function texture(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new T.CanvasTexture(c);t.encoding=T.sRGBEncoding;t.anisotropy=4;return t;}
+function texture(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new T.CanvasTexture(c);t.encoding=T.sRGBEncoding;t.anisotropy=8;return t;}
 function label(text,accent='#95bfb1',subtitle='',width=512,height=144){return texture(width,height,(c,w,h)=>{
   c.fillStyle='#15221f';c.beginPath();c.roundRect(2,2,w-4,h-4,12);c.fill();c.strokeStyle='#53665d';c.lineWidth=2;c.stroke();c.fillStyle=accent;c.fillRect(18,22,4,h-44);c.textAlign='left';c.textBaseline='middle';c.font=`500 ${subtitle?h*.36:h*.46}px monospace`;c.fillText(text,40,subtitle?h*.40:h*.5);if(subtitle){c.fillStyle='#80988e';c.font=`${h*.18}px monospace`;c.fillText(subtitle,42,h*.77);}
+});}
+// Port tags: one large glyph pair on a frosted pill reads at small sizes instead of a dark box of micro text.
+function tagTexture(id,type,color){return texture(208,80,(c,w,h)=>{
+  c.fillStyle='rgba(14,24,21,.86)';c.beginPath();c.roundRect(2,4,w-4,h-8,(h-8)/2);c.fill();c.strokeStyle=color;c.globalAlpha=.7;c.lineWidth=3;c.stroke();c.globalAlpha=1;
+  c.fillStyle=color;c.beginPath();c.arc(38,h/2,26,0,PI*2);c.fill();c.fillStyle='#0d1714';c.textAlign='center';c.textBaseline='middle';c.font='700 34px monospace';c.fillText(id,38,h/2+2);
+  c.fillStyle='#e8f1ec';c.textAlign='left';c.font='700 40px monospace';c.fillText(type,74,h/2+3);
 });}
 function dialTexture(color){return texture(256,256,(c)=>{c.translate(128,128);c.fillStyle='#10231f';c.beginPath();c.arc(0,0,123,0,PI*2);c.fill();c.strokeStyle='#758a7e';c.lineWidth=2;for(let i=0;i<=24;i++){const a=PI*.76+i*PI*1.5/24;c.beginPath();c.moveTo(Math.cos(a)*(i%4?95:84),Math.sin(a)*(i%4?95:84));c.lineTo(Math.cos(a)*107,Math.sin(a)*107);c.stroke();}c.strokeStyle=color;c.lineWidth=5;c.beginPath();c.arc(0,0,108,PI*.76,PI*1.48);c.stroke();c.fillStyle='#c7d7ce';c.textAlign='center';c.font='20px monospace';c.fillText('FLOW',0,60);c.font='26px monospace';c.fillText('0.84',0,22);});}
 function weld(geometry){
@@ -59,6 +65,8 @@ export class CabinetScene{
     const fill=new T.DirectionalLight('#b4d5ec',1.25);fill.position.set(8,7,-6);this.scene.add(fill);const rim=new T.DirectionalLight('#a5e9ce',1.9);rim.position.set(-6,4,-8);this.scene.add(rim);
     this.staticGroup=new T.Group();this.pipeGroup=new T.Group();this.guideGroup=new T.Group();this.scene.add(this.staticGroup,this.pipeGroup,this.guideGroup);this.clipPlane=new T.Plane(new T.Vector3(0,-1,0),100);
     this.raycaster=new T.Raycaster();this.pointer=new T.Vector2();this.pickables=[];this.target=new T.Vector3(0,1.4,0);this.yaw=.68;this.pitch=1.03;this.goalYaw=this.yaw;this.goalPitch=this.pitch;this.zoom=1;this.slice=false;this.drag=null;this.pointers=new Map();this.pinchDistance=0;this.velocity={yaw:0,pitch:0};this.lastTime=0;this.lastInteraction=0;this.presentation=false;
+    // Fine modelling, contact shadows and post are GPU-only; the WASM/2D fallbacks keep their triangle budget.
+    this.fine=!this.renderer.isSoftwareRenderer;
     this.createMaterials();if(!this.renderer.isSoftwareRenderer){this.createEnvironment();this.createPost();}
     this.bindEvents();this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(container);this.applySettings(settings);this.resize();
   }
@@ -77,6 +85,13 @@ export class CabinetScene{
     this.screw=this.mat('fasteners',{color:'#637c70',roughness:.21,metalness:.96});
     this.led=this.mat('status LED',{color:'#a8edc7',roughness:.3,emissive:'#79d7ae',emissiveIntensity:.6,metalness:.1});
     this.panelGlass=this.mat('safety glass',{color:'#d3e6dd',roughness:.095,metalness:0,transmission:.97,thickness:.025,ior:1.46,clearcoat:1});this.panelGlass.userData.glass=true;this.panelGlass.userData.fallbackOpacity=.018;
+    // Brushed aluminium for the extrusion frame: streaks only across U, so the grain runs along each profile.
+    const bd=new Uint8Array(256*4*4);for(let x=0;x<256;x++){const v=(rand()-.5)*70;for(let y=0;y<4;y++){const i=(y*256+x)*4;bd[i]=128+v;bd[i+1]=128;bd[i+2]=255;bd[i+3]=255;}}
+    const brushed=new T.DataTexture(bd,256,4,T.RGBAFormat);brushed.wrapS=brushed.wrapT=T.RepeatWrapping;brushed.repeat.set(9,1);brushed.needsUpdate=true;brushed.userData.shared=true;this.brushed=brushed;
+    this.alu=this.mat('brushed aluminium',{color:'#b3c2bb',roughness:.33,metalness:.9,normalMap:brushed,normalScale:new T.Vector2(.16,.16),clearcoat:.15,clearcoatRoughness:.35});
+    this.glassEdge=this.mat('glass edge',{color:'#8fc2ad',roughness:.08,metalness:0,clearcoat:1,clearcoatRoughness:.05});
+    // Indicator LEDs read as small light sources; the high-quality post pass gives them a restrained halo.
+    if(this.fine){this.led.color.set('#3c8f6b').convertSRGBToLinear();this.led.emissive.set('#56e0a0').convertSRGBToLinear();this.led.emissiveIntensity=1.25;}
   }
   mat(name,props){if(this.assets.has(name))return this.assets.get(name);const m=new T.MeshPhysicalMaterial(props);m.color.convertSRGBToLinear();m.emissive.convertSRGBToLinear();m.userData.shared=true;this.assets.set(name,m);return m;}
   geometry(name,fn){if(this.geoCache.has(name))return this.geoCache.get(name);const g=fn();g.userData.shared=true;this.geoCache.set(name,g);return g;}
@@ -98,12 +113,41 @@ export class CabinetScene{
     }
     return weld(g);
   });}
+  /** Aluminium extrusion along Y: chamfered corners and an open slot on each face. w is X, d is Z. */
+  profile(w,d,len){return this.geometry(`profile:${w}:${d}:${len}`,()=>{
+    const a=w/2,b=d/2,c=Math.min(a,b)*.2,sw=Math.min(a,b)*.52,sd=Math.min(a,b)*.26,s=new T.Shape();
+    s.moveTo(-a+c,-b);s.lineTo(-sw/2,-b);s.lineTo(-sw/2,-b+sd);s.lineTo(sw/2,-b+sd);s.lineTo(sw/2,-b);s.lineTo(a-c,-b);s.lineTo(a,-b+c);
+    s.lineTo(a,-sw/2);s.lineTo(a-sd,-sw/2);s.lineTo(a-sd,sw/2);s.lineTo(a,sw/2);s.lineTo(a,b-c);s.lineTo(a-c,b);
+    s.lineTo(sw/2,b);s.lineTo(sw/2,b-sd);s.lineTo(-sw/2,b-sd);s.lineTo(-sw/2,b);s.lineTo(-a+c,b);s.lineTo(-a,b-c);
+    s.lineTo(-a,sw/2);s.lineTo(-a+sd,sw/2);s.lineTo(-a+sd,-sw/2);s.lineTo(-a,-sw/2);s.lineTo(-a,-b+c);s.closePath();
+    const g=new T.ExtrudeGeometry(s,{depth:len,bevelEnabled:false,curveSegments:1});g.translate(0,0,-len/2);g.rotateX(-PI/2);return g;
+  });}
+  /** Right-angle corner gusset with a lightening hole; legs run along local +X and +Y. */
+  gussetGeo(L,t){return this.geometry(`gusset:${L}:${t}`,()=>{
+    const s=new T.Shape(),k=L*.16;s.moveTo(0,0);s.lineTo(L,0);s.lineTo(L,k*.55);s.lineTo(k*.55,L);s.lineTo(0,L);s.closePath();
+    const hole=new T.Path();hole.absarc(L*.3,L*.3,L*.085,0,PI*2,true);s.holes.push(hole);
+    const g=new T.ExtrudeGeometry(s,{depth:t,bevelEnabled:true,bevelThickness:t*.25,bevelSize:t*.25,bevelSegments:1,curveSegments:16});g.translate(0,0,-t/2);return g;
+  });}
+  gusset(g,p,along,up,out){
+    const x=V(along),y=V([0,up,0]),z=new T.Vector3().crossVectors(x,y),n=V(out),m=this.mesh(this.gussetGeo(.27,.011),this.alu,g,p);
+    m.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(x,y,z));
+    for(const [u,v] of [[.18,.035],[.035,.18]]){const q=V(p).addScaledVector(x,u).addScaledVector(y,v).addScaledVector(n,.0085);const sc=this.cyl(g,.016,.007,q.toArray(),this.chrome,6);sc.quaternion.setFromUnitVectors(Y,n);}
+    return m;
+  }
+  /** Straight-knurled cap: radial ridges on the side wall, flat machined face. */
+  knurl(g,r,h,p,mat=this.chrome,ridges=36){return this.mesh(this.geometry(`knurl:${r}:${h}:${ridges}`,()=>{
+    const geo=new T.CylinderGeometry(r,r,h,ridges*4,2,false),pos=geo.attributes.position;
+    for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i),d=Math.hypot(x,z);if(d<r*.99)continue;const f=1-.03*(.5+.5*Math.cos(Math.atan2(z,x)*ridges));pos.setX(i,x*f);pos.setZ(i,z*f);}
+    geo.computeVertexNormals();return geo;
+  }),mat,g,p);}
+  /** Hex nut / bolt head aligned to the parent's local Y. */
+  nut(g,p,r=.017,h=.013,mat=this.screw){const m=this.cyl(g,r,h,p,mat,6);m.rotation.y=PI/6;return m;}
   mesh(geo,mat,g,p=[0,0,0]){const m=new T.Mesh(geo,mat);m.position.set(...p);m.castShadow=true;m.receiveShadow=true;g.add(m);return m;}
   b(g,w,h,d,p,mat=this.metal,r=.04){return this.mesh(this.box(w,h,d,r),mat,g,p);}
   cyl(g,r,h,p,mat=this.metal,radial=32,r2=r){return this.mesh(this.geometry(`cyl:${r}:${h}:${radial}:${r2}`,()=>new T.CylinderGeometry(r,r2,h,radial,1,false)),mat,g,p);}
   ring(g,r,t,p,mat=this.chrome){const m=this.mesh(this.geometry(`ring:${r}:${t}`,()=>new T.TorusGeometry(r,t,8,40)),mat,g,p);m.rotation.x=PI/2;return m;}
   tube(g,a,b,r,mat=this.metal,radial=16){const d=V(b).sub(V(a)),len=d.length();if(len<.001)return null;const m=this.cyl(g,r,len,V(a).add(V(b)).multiplyScalar(.5).toArray(),mat,radial);m.quaternion.setFromUnitVectors(Y,d.normalize());return m;}
-  lathe(g,profile,p,mat=this.chrome){const key=profile.flat().join(',');return this.mesh(this.geometry('lathe:'+key,()=>new T.LatheGeometry(profile.map(p=>new T.Vector2(...p)),40)),mat,g,p);}
+  lathe(g,profile,p,mat=this.chrome,radial=40){const key=radial+':'+profile.flat().join(',');return this.mesh(this.geometry('lathe:'+key,()=>new T.LatheGeometry(profile.map(p=>new T.Vector2(...p)),radial)),mat,g,p);}
   screwAt(g,p,axis='y',size=.027){const m=this.cyl(g,size,.016,p,this.chrome,6);if(axis==='z')m.rotation.x=PI/2;if(axis==='x')m.rotation.z=PI/2;return m;}
   plate(g,text,p,w=.5,h=.15,accent='#a7c5b8',subtitle=''){const tex=label(text,accent,subtitle);const m=this.mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:tex,transparent:true}),g,p);m.castShadow=false;m.receiveShadow=false;return m;}
   gauge(g,p,r=.11,accent='#8bd8b4',value=.6){
@@ -112,19 +156,53 @@ export class CabinetScene{
     const hand=new T.Group();hand.position.set(p[0],p[1],p[2]+.043);hand.rotation.z=-.8;hand.userData.unbatched=true;g.add(hand);const m=this.b(hand,r*.66,.012,.012,[r*.3,0,0],this.brass,.003);m.castShadow=false;this.needles.push({hand,base:-.8,value});
     this.mesh(new T.SphereGeometry(.018,10,6),this.chrome,g,[p[0],p[1],p[2]+.046]);
   }
+  contactTexture(){
+    // Separable smooth falloff: dark under the footprint, fading out ~0.6 units beyond the plinth edge.
+    const n=128,data=new Uint8Array(n*n*4),f=t=>{const d=Math.abs(t*2-1),x=Math.min(1,Math.max(0,(1-d)/.42));return x*x*(3-2*x);};
+    for(let y=0;y<n;y++)for(let x=0;x<n;x++){const i=(y*n+x)*4,a=f((x+.5)/n)*f((y+.5)/n);data[i]=data[i+1]=data[i+2]=6;data[i+3]=Math.round(a*150);}
+    const t=new T.DataTexture(data,n,n,T.RGBAFormat);t.magFilter=t.minFilter=T.LinearFilter;t.needsUpdate=true;return t;
+  }
+  engraveTexture(){return texture(2048,96,(c,w,h)=>{
+    c.clearRect(0,0,w,h);c.textAlign='center';c.textBaseline='middle';c.font='500 46px monospace';
+    const text='S T R A T A   ·   F L U I D   A P P A R A T U S   ·   A T E L I E R   0 2   ·   S / N   0 8 4';
+    // Engraved: dark groove, a light lip on the lower edge and a soft shadow on the upper edge.
+    c.fillStyle='rgba(255,255,255,.75)';c.fillText(text,w/2,h/2+2);c.fillStyle='rgba(0,0,0,.25)';c.fillText(text,w/2,h/2-2);c.fillStyle='rgba(74,88,80,.82)';c.fillText(text,w/2,h/2);
+  });}
   createEnvironment(){
     const room=new T.Scene();room.background=new T.Color('#253c34');
     const box=new T.Mesh(new T.BoxGeometry(30,20,30),new T.MeshBasicMaterial({color:'#62776c',side:T.BackSide}));room.add(box);
     const softbox=(p,w,h,c)=>{const m=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({color:new T.Color(...c),side:T.DoubleSide}));m.position.set(...p);m.lookAt(0,1,0);room.add(m);};
     softbox([-7,8,7],8,10,[4.6,4.2,3.5]);softbox([6,5,-5],5,12,[2.2,3.1,3.8]);softbox([-4,2,-8],2,12,[1.5,3.2,2.6]);softbox([0,10,1],9,3,[3.0,3.4,3.1]);
+    if(this.fine){
+      // Floor, black flags and set pieces (in the spirit of three's RoomEnvironment) give metal and glass
+      // structured reflections instead of a uniform grey wash.
+      const block=(p,s,c)=>{const m=new T.Mesh(new T.BoxGeometry(...s),new T.MeshBasicMaterial({color:c}));m.position.set(...p);room.add(m);};
+      block([0,-9.9,0],[30,.2,30],'#2a3a33');block([9,-4,6],[2,12,4],'#1b2723');block([-10,-5,-3],[3,9,6],'#33463e');block([3,-7,-9],[8,5,2],'#3d5148');
+      softbox([8,3,8],3,7,[3.4,3.6,3.3]);softbox([-9,6,0],1.2,9,[2.6,3.4,3.0]);
+    }
     try{const pmrem=new T.PMREMGenerator(this.renderer);this.envTarget=pmrem.fromScene(room,.03);this.scene.environment=this.envTarget.texture;pmrem.dispose();}catch(err){console.warn('Studio environment:',err.message);}room.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
   }
   createPost(){
-    this.postTarget=new T.WebGLRenderTarget(1,1,{minFilter:T.LinearFilter,magFilter:T.LinearFilter,format:T.RGBAFormat});this.postTarget.texture.encoding=T.sRGBEncoding;
+    // High-quality path: 4x MSAA scene target (WebGL2), a quarter-resolution bloom chain keyed to bright
+    // *saturated* pixels (indicator LEDs, lit fluid), then one composite with a light vignette.
+    // WebGL1 keeps the previous alpha-edge filter as its anti-aliasing.
+    const msaa=this.renderer.capabilities.isWebGL2?4:0,rt=(o={})=>{const t=new T.WebGLRenderTarget(1,1,{minFilter:T.LinearFilter,magFilter:T.LinearFilter,format:T.RGBAFormat,...o});t.texture.encoding=T.sRGBEncoding;return t;};
+    this.postTarget=rt({samples:msaa});this.bloomA=rt();this.bloomB=rt();
     this.postScene=new T.Scene();this.postCamera=new T.OrthographicCamera(-1,1,1,-1,0,1);
-    this.postMat=new T.ShaderMaterial({depthTest:false,depthWrite:false,transparent:true,toneMapped:false,uniforms:{image:{value:this.postTarget.texture},resolution:{value:new T.Vector2(1,1)}},vertexShader:'varying vec2 tex;void main(){tex=uv;gl_Position=vec4(position.xy,0.0,1.0);}',fragmentShader:`uniform sampler2D image;uniform vec2 resolution;varying vec2 tex;void main(){vec4 c=texture2D(image,tex);vec2 p=1.0/resolution;vec4 a=texture2D(image,tex+vec2(p.x,0.)),b=texture2D(image,tex-vec2(p.x,0.)),d=texture2D(image,tex+vec2(0.,p.y)),e=texture2D(image,tex-vec2(0.,p.y));float edge=abs(a.a-b.a)+abs(d.a-e.a);vec4 filtered=(c*4.+a+b+d+e)/8.;c=mix(c,filtered,clamp(edge*.38,0.,.45));float vignette=1.-.085*smoothstep(.18,.78,distance(tex,vec2(.5)));gl_FragColor=vec4(c.rgb*vignette,c.a);}`});
-    this.postScene.add(new T.Mesh(new T.PlaneGeometry(2,2),this.postMat));
+    const vertexShader='varying vec2 tex;void main(){tex=uv;gl_Position=vec4(position.xy,0.0,1.0);}',pass=(uniforms,fragmentShader)=>new T.ShaderMaterial({depthTest:false,depthWrite:false,toneMapped:false,uniforms,vertexShader,fragmentShader});
+    this.brightMat=pass({image:{value:this.postTarget.texture},texel:{value:new T.Vector2(1,1)}},`uniform sampler2D image;uniform vec2 texel;varying vec2 tex;
+      vec3 key(vec2 o){vec3 c=texture2D(image,tex+o*texel).rgb;float hi=max(c.r,max(c.g,c.b)),lo=min(c.r,min(c.g,c.b));return c*smoothstep(.82,.98,hi)*smoothstep(.16,.34,hi-lo);}
+      void main(){gl_FragColor=vec4((key(vec2(-1.))+key(vec2(1.,-1.))+key(vec2(-1.,1.))+key(vec2(1.)))*.25,1.);}`);
+    this.blurMat=pass({image:{value:null},direction:{value:new T.Vector2(1,0)}},`uniform sampler2D image;uniform vec2 direction;varying vec2 tex;
+      void main(){vec3 c=texture2D(image,tex).rgb*.227;c+=(texture2D(image,tex+direction*1.385).rgb+texture2D(image,tex-direction*1.385).rgb)*.316;c+=(texture2D(image,tex+direction*3.231).rgb+texture2D(image,tex-direction*3.231).rgb)*.07;gl_FragColor=vec4(c,1.);}`);
+    this.postMat=pass({image:{value:this.postTarget.texture},bloom:{value:this.bloomA.texture},bloomStrength:{value:.55},edgeFilter:{value:msaa?0:1},resolution:{value:new T.Vector2(1,1)}},`uniform sampler2D image,bloom;uniform float bloomStrength,edgeFilter;uniform vec2 resolution;varying vec2 tex;
+      void main(){vec4 c=texture2D(image,tex);if(edgeFilter>.5){vec2 p=1.0/resolution;vec4 a=texture2D(image,tex+vec2(p.x,0.)),b=texture2D(image,tex-vec2(p.x,0.)),d=texture2D(image,tex+vec2(0.,p.y)),e=texture2D(image,tex-vec2(0.,p.y));float edge=abs(a.a-b.a)+abs(d.a-e.a);c=mix(c,(c*4.+a+b+d+e)/8.,clamp(edge*.38,0.,.45));}
+      vec3 glow=texture2D(bloom,tex).rgb*bloomStrength;float vignette=1.-.085*smoothstep(.18,.78,distance(tex,vec2(.5)));
+      vec3 rgb=c.rgb*vignette+glow*(1.-c.rgb*.5);gl_FragColor=vec4(rgb,max(c.a,clamp(max(glow.r,max(glow.g,glow.b)),0.,1.)));}`);
+    this.postMat.transparent=true;
+    this.postQuad=new T.Mesh(new T.PlaneGeometry(2,2),this.postMat);this.postScene.add(this.postQuad);
   }
+  postPass(material,target){this.postQuad.material=material;this.renderer.setRenderTarget(target);this.renderer.render(this.postScene,this.postCamera);}
   applySettings(settings){const previousQuality=this.currentQuality;this.currentQuality=settings.quality;this.settings=settings;const q=qualityOptions[settings.quality]||qualityOptions.high;this.renderer.setPixelRatio(this.renderer.isStudioRenderer?(settings.quality==='high'?(settings.reducedMotion?1.4:1):.85):Math.min(devicePixelRatio||1,q.ratio));this.keyLight.shadow.mapSize.set(q.shadow,q.shadow);if(this.keyLight.shadow.map){this.keyLight.shadow.map.dispose();this.keyLight.shadow.map=null;}this.renderer.shadowMap.needsUpdate=true;this.resize();if(this.state&&previousQuality&&previousQuality!==this.currentQuality)this.update(this.state);}
   point(p){const n=(this.state.level.size-1)/2;return new T.Vector3((p[0]-n)*.94,p[1]*.94+.36,(p[2]-n)*.94);}
   resize(){
@@ -133,7 +211,7 @@ export class CabinetScene{
     const n=this.state?.level.size||5,levels=this.state?.level.height||4,edge=((n-1)*.94+1.9)/2,top=(levels-1)*.94+1.05;let maxX=0,maxY=0;
     for(const x of [-edge,edge])for(const y of [-.96,top])for(const z of [-edge,edge]){const v=V([x,y,z]).applyMatrix4(this.camera.matrixWorldInverse);maxX=Math.max(maxX,Math.abs(v.x));maxY=Math.max(maxY,Math.abs(v.y));}
     const half=Math.max(maxY,maxX/(w/h))*1.035/this.zoom;this.camera.left=-half*w/h;this.camera.right=half*w/h;this.camera.top=half;this.camera.bottom=-half;this.camera.updateProjectionMatrix();
-    if(this.postTarget){const ratio=this.renderer.getPixelRatio();this.postTarget.setSize(Math.round(w*ratio),Math.round(h*ratio));this.postMat.uniforms.resolution.value.set(w*ratio,h*ratio);}
+    if(this.postTarget){const ratio=this.renderer.getPixelRatio(),W=Math.round(w*ratio),H=Math.round(h*ratio),bw=Math.max(1,Math.round(W/4)),bh=Math.max(1,Math.round(H/4));this.postTarget.setSize(W,H);this.postMat.uniforms.resolution.value.set(W,H);this.bloomA.setSize(bw,bh);this.bloomB.setSize(bw,bh);this.brightMat.uniforms.texel.value.set(1/W,1/H);this.bloomTexel=[1/bw,1/bh];}
     this.renderer.lastFrame=-Infinity;
   }
   updateCamera(){const d=16;this.camera.position.set(this.target.x+d*Math.sin(this.pitch)*Math.sin(this.yaw),this.target.y+d*Math.cos(this.pitch),this.target.z+d*Math.sin(this.pitch)*Math.cos(this.yaw));this.camera.lookAt(this.target);this.camera.updateMatrixWorld();}
@@ -165,13 +243,21 @@ export class CabinetScene{
     }
     // Individually machined corner nodes. Front frames are thinner to leave the routes readable.
     for(const x of [-edge,edge])for(const z of [-edge,edge]){
-      this.b(g,.245,.125,.245,[x,-.025,z],this.metal,.035);this.b(g,.112,top+.04,.112,[x,(top-.06)/2,z],this.metal,.014);
-      this.b(g,.033,top-.2,.012,[x,(top-.04)/2,z+Math.sign(z)*.058],this.rubber,.004);
+      this.b(g,.245,.125,.245,[x,-.025,z],this.metal,.035);
+      if(this.fine){
+        // Slotted extrusion post; the gasket strip now sits flush in the outer slot.
+        this.mesh(this.profile(.112,.112,top+.04),this.alu,g,[x,(top-.06)/2,z]);this.b(g,.026,top-.2,.012,[x,(top-.04)/2,z+Math.sign(z)*.05],this.rubber,.004);
+        for(const [y,up] of [[top,-1],[-.035,1]]){
+          this.gusset(g,[x,y,z+Math.sign(z)*.054],[-Math.sign(x),0,0],up,[0,0,Math.sign(z)]);
+          this.gusset(g,[x+Math.sign(x)*.054,y,z],[0,0,-Math.sign(z)],up,[Math.sign(x),0,0]);
+        }
+      }else{this.b(g,.112,top+.04,.112,[x,(top-.06)/2,z],this.metal,.014);this.b(g,.033,top-.2,.012,[x,(top-.04)/2,z+Math.sign(z)*.058],this.rubber,.004);}
       this.b(g,.23,.12,.23,[x,top,z],this.chrome,.037);
       for(const y of [.14,top-.2])this.screwAt(g,[x,y,z+Math.sign(z)*.066],'z',.025);
       this.cyl(g,.052,.017,[x,top+.068,z],this.dark,20);this.screwAt(g,[x,top+.078,z],'y',.024);
     }
     for(const y of [-.035,top])for(const axis of ['x','z'])for(const s of [-1,1]){
+      if(this.fine){const m=this.mesh(axis==='x'?this.profile(.075,.09,span-.13):this.profile(.09,.075,span-.13),this.alu,g,axis==='x'?[0,y,edge*s]:[edge*s,y,0]);if(axis==='x')m.rotation.z=PI/2;else m.rotation.x=PI/2;continue;}
       axis==='x'?this.b(g,span-.13,.075,.09,[0,y,edge*s],this.metal,.019):this.b(g,.09,.075,span-.13,[edge*s,y,0],this.metal,.019);
     }
     // Light guides on the far side, not a glow over the entire frame.
@@ -180,6 +266,12 @@ export class CabinetScene{
     // Glass, with a real transmission material on WebGL and restrained alpha in CPU mode.
     const glass=(w,h,p,rot)=>{const m=this.mesh(new T.PlaneGeometry(w,h),this.panelGlass,g,p);m.rotation.y=rot;m.castShadow=false;m.receiveShadow=false;m.renderOrder=4;return m;};
     glass(span-.15,top-.14,[0,top/2,-edge+.018],0);glass(span-.15,top-.14,[-edge+.018,top/2,0],PI/2);
+    if(this.fine){
+      // Polished panel edges: the green of a real float-glass edge, seen where the panel meets the frame.
+      const gw=span-.15,gh=top-.14,e=.009;
+      for(const s of [-1,1]){this.b(g,e,gh,e,[s*gw/2,top/2,-edge+.018],this.glassEdge,.002);this.b(g,gw,e,e,[0,top/2+s*gh/2,-edge+.018],this.glassEdge,.002);
+        this.b(g,e,gh,e,[-edge+.018,top/2,s*gw/2],this.glassEdge,.002);this.b(g,e,e,gw,[-edge+.018,top/2+s*gh/2,0],this.glassEdge,.002);}
+    }
     for(let layer=0;layer<l.height;layer++){
       const y=layer*.94+.045;
       this.b(g,span-.14,.04,.045,[0,y,-edge+.025],this.dark,.01);this.b(g,.045,.04,span-.14,[-edge+.025,y,0],this.dark,.01);
@@ -203,6 +295,13 @@ export class CabinetScene{
     // Left side fin recess.
     this.b(g,.028,.24,2.5,[-edge-.495,-.48,0],this.dark,.006);for(let i=0;i<27;i++)this.b(g,.025,.17,.026,[-edge-.513,-.47,-1.15+i*.089],this.metal,.004);
     const ground=this.mesh(new T.PlaneGeometry(30,30),new T.ShadowMaterial({opacity:.23}),g,[0,-.964,0]);ground.rotation.x=-PI/2;ground.castShadow=false;ground.renderOrder=-10;
+    if(this.fine){
+      // Soft contact occlusion directly under the plinth; the shadow map only carries the directional shadow.
+      const contact=this.mesh(new T.PlaneGeometry(span+2.3,span+2.3),new T.MeshBasicMaterial({map:this.contactTexture(),transparent:true,depthWrite:false,toneMapped:false}),g,[0,-.962,0]);contact.rotation.x=-PI/2;contact.castShadow=contact.receiveShadow=false;contact.renderOrder=-9;
+      // Engraved serial line on the visible side of the porcelain plinth.
+      const engraved=this.mesh(new T.PlaneGeometry(span-.2,.085),new T.MeshStandardMaterial({map:this.engraveTexture(),transparent:true,depthWrite:false,roughness:.4,metalness:0,polygonOffset:true,polygonOffsetFactor:-2}),g,[(span+1)/2+.0015,-.49,0]);engraved.rotation.y=PI/2;engraved.castShadow=false;
+      const R=Math.hypot(edge+.62,edge+.62,top+1)+.15;Object.assign(this.keyLight.shadow.camera,{left:-R,right:R,top:R,bottom:-R});this.keyLight.shadow.camera.updateProjectionMatrix();
+    }
     // Rail channels run BETWEEN grid columns so legal vertical routes stay clear.
     const railKeys=new Set();for(const cell of l.blocks){if(cell[1]===0)continue;const y=cell[1]*.94+.002,z=this.point(cell).z+.345,k=cell[1]+':'+cell[2];if(!railKeys.has(k)){railKeys.add(k);this.b(g,span-.12,.032,.037,[0,y,z],this.dark,.007);for(const x of [-edge+.025,edge-.025])this.b(g,.08,.057,.076,[x,y,z],this.metal,.01);}}
     for(let lno=1;lno<l.height;lno++){const y=lno*.94+.002;for(const x of [-edge,edge])this.b(g,.035,.039,span-.12,[x,y,0],this.dark,.009);}
@@ -235,7 +334,7 @@ export class CabinetScene{
       this.plate(group,`HX-${String(index+1).padStart(2,'0')}`,[-.04,-.25,.296],.30,.058,'#a5b6aa');
     }else if(type===1){
       this.b(group,.58,.50,.58,[0,-.054,0],this.enamel,.063);this.b(group,.48,.033,.48,[0,.213,0],this.metal,.013);
-      this.cyl(group,.124,.093,[-.115,.267,0],this.brass);this.ring(group,.115,.013,[-.115,.316,0],this.chrome);
+      this.fine?this.knurl(group,.124,.093,[-.115,.267,0],this.brass,40):this.cyl(group,.124,.093,[-.115,.267,0],this.brass);this.ring(group,.115,.013,[-.115,.316,0],this.chrome);
       this.b(group,.39,.23,.025,[0,-.03,.296],this.dark,.022);this.gauge(group,[-.104,-.015,.319],.079,'#a5dec3',.25+index*.01);
       for(let k=0;k<3;k++)this.b(group,.082,.013,.015,[.11,.043-k*.047,.317],k===0?this.led:this.metal,.003);
       for(const x of [-.17,.17]){const c=this.cyl(group,.044,.06,[x,-.21,.32],this.chrome,16);c.rotation.x=PI/2;}
@@ -243,7 +342,7 @@ export class CabinetScene{
     }else{
       this.lathe(group,[[0,-.3],[.19,-.3],[.25,-.26],[.26,-.20],[.24,-.16],[.24,.17],[.22,.23],[.18,.28],[0,.28]],[0,0,0],this.enamel);
       this.ring(group,.245,.018,[0,-.18,0],this.chrome);this.ring(group,.24,.024,[0,.14,0],this.brass);
-      this.cyl(group,.172,.049,[0,.293,0],this.dark);for(let i=0;i<6;i++){const a=i*PI/3;this.screwAt(group,[Math.cos(a)*.181,.289,Math.sin(a)*.181],'y',.022);}
+      this.fine?this.knurl(group,.172,.049,[0,.293,0],this.dark,52):this.cyl(group,.172,.049,[0,.293,0],this.dark);for(let i=0;i<6;i++){const a=i*PI/3;this.screwAt(group,[Math.cos(a)*.181,.289,Math.sin(a)*.181],'y',.022);}
       this.b(group,.13,.24,.025,[0,-.014,.251],this.dark,.01);for(let i=0;i<4;i++)this.b(group,.06,.015,.006,[0,-.071+i*.04,.268],i===3?this.led:this.metal,.003);
     }
     this.tube(group,[-.28,-.36,-.26],[.28,-.36,-.26],.016,this.metal,8);
@@ -257,17 +356,17 @@ export class CabinetScene{
     this.cyl(g,.151,type==='in'?.26:.175,[0,type==='in'?-.015:-.06,0],colored,40);
     const meniscus=this.cyl(g,.149,.012,[0,type==='in'?.12:.031,0],colored,40);meniscus.castShadow=false;
     this.lathe(g,[[0,.20],[.168,.20],[.218,.22],[.224,.258],[.198,.283],[.18,.292],[0,.292]],[0,0,0],this.chrome);
-    this.ring(g,.188,.012,[0,.294,0],this.rubber);this.cyl(g,.10,.042,[0,.32,0],type==='in'?this.brass:this.dark,32);this.cyl(g,.067,.009,[0,.347,0],colored,24);
+    this.ring(g,.188,.012,[0,.294,0],this.rubber);this.fine?this.knurl(g,.10,.042,[0,.32,0],type==='in'?this.brass:this.dark,30):this.cyl(g,.10,.042,[0,.32,0],type==='in'?this.brass:this.dark,32);this.cyl(g,.067,.009,[0,.347,0],colored,24);
     // Four protective cage rods and fasteners, plus a engraved optical level scale.
     for(let k=0;k<4;k++){const a=PI*.25+k*PI*.5;this.tube(g,[Math.cos(a)*.207,-.203,Math.sin(a)*.207],[Math.cos(a)*.207,.208,Math.sin(a)*.207],.009,this.metal,8);this.screwAt(g,[Math.cos(a)*.189,.3,Math.sin(a)*.189],'y',.016);}
     for(let k=0;k<5;k++)this.b(g,k%2?.03:.045,.006,.009,[.072,-.135+k*.057,.183],this.chrome,.002);
-    const sprite=new T.Sprite(new T.SpriteMaterial({map:label(`${id}  ${type==='in'?'IN':'OUT'}`,color),transparent:true,depthTest:false}));sprite.position.set(0,.535,0);sprite.scale.set(.46,.128,1);sprite.renderOrder=6;g.add(sprite);
+    const sprite=new T.Sprite(new T.SpriteMaterial({map:tagTexture(id,type==='in'?'IN':'OUT',color),transparent:true,depthTest:false,toneMapped:false}));sprite.position.set(0,.54,0);sprite.scale.set(.33,.127,1);sprite.renderOrder=6;g.add(sprite);
     this.tube(g,[0,.356,0],[0,.44,0],.007,this.metal,6);
   }
   update(state){
     this.visualRevision=(this.visualRevision||0)+1;this.state=state;disposeGroup(this.pipeGroup);this.pipeVisuals=[];this.pumpRotors=[];const q=qualityOptions[this.settings.quality]||qualityOptions.high;
     state.paths.forEach((path,i)=>{
-      if(path.length<2)return;const points=path.map(p=>this.point(p)),curve=roundedCurve(points),segments=Math.max(24,(path.length-1)*20),color=COLORS[i];
+      if(path.length<2)return;const points=path.map(p=>this.point(p)),curve=roundedCurve(points),segments=Math.max(24,(path.length-1)*(this.fine&&this.settings.quality==='high'?24:20)),color=COLORS[i];
       const outerMaterial=new T.MeshPhysicalMaterial({color,roughness:.145,metalness:.06,transmission:.66,thickness:.036,ior:1.44,clearcoat:1,clearcoatRoughness:.09,clipShadows:true,clippingPlanes:this.slice?[this.clipPlane]:[]});outerMaterial.color.convertSRGBToLinear();outerMaterial.userData.glass=true;outerMaterial.userData.fallbackOpacity=.09;
       const outer=this.mesh(new T.TubeGeometry(curve,segments,.121,q.radial,false),outerMaterial,this.pipeGroup);outer.castShadow=false;outer.renderOrder=3;
       // Continuous inner conduit: visible at low saturation when empty, never a segmented bead chain.
@@ -290,8 +389,16 @@ export class CabinetScene{
         if(pump){this.pump(mid,dir,metal,seal,brass);continue;}
         // Fewer collars: long straight runs have a fitting every second grid edge; bends retain one.
         const straight=j>1&&dir.dot(a.clone().sub(points[j-2]).normalize())>.99;
-        if(straight&&j%2===0&&j<points.length-1)continue;
+        if(straight&&j%2===0&&j<points.length-1){if(this.fine)this.clamp(mid,dir,metal,seal);continue;}
         const fitting=new T.Group();fitting.position.copy(mid);fitting.quaternion.setFromUnitVectors(Y,dir);this.pipeGroup.add(fitting);
+        if(this.fine){
+          // Bolted flange pair: two machined hubs, a gasket and six through-bolts with hex nuts.
+          this.cyl(fitting,.152,.012,[0,0,0],seal,28);
+          this.lathe(fitting,[[.121,.006],[.163,.006],[.169,.012],[.169,.028],[.162,.035],[.139,.039],[.128,.06],[.121,.066]],[0,0,0],metal,28);
+          this.lathe(fitting,[[.121,-.066],[.128,-.06],[.139,-.039],[.162,-.035],[.169,-.028],[.169,-.012],[.163,-.006],[.121,-.006]],[0,0,0],metal,28);
+          for(let k=0;k<6;k++){const ang=k*PI/3+PI/6,x=Math.cos(ang)*.149,z=Math.sin(ang)*.149;this.cyl(fitting,.0075,.098,[x,0,z],this.chrome,8);for(const y of [-.043,.043])this.nut(fitting,[x,y,z],.0145,.011);}
+          continue;
+        }
         this.cyl(fitting,.147,.066,[0,0,0],metal,32);for(const y of [-.045,.045])this.cyl(fitting,.136,.016,[0,y,0],seal,32);
         for(const y of [-.062,.062])this.cyl(fitting,.146,.013,[0,y,0],metal,32);
         for(let k=0;k<6;k++){const ang=k*PI/3;const b=this.b(fitting,.012,.037,.012,[Math.cos(ang)*.15,0,Math.sin(ang)*.15],metal,.003);b.rotation.y=-ang;}
@@ -308,6 +415,15 @@ export class CabinetScene{
     for(let k=0;k<4;k++)this.b(g,.022,.012,.141,[.357,-.073+k*.047,.045],metal,.004);
     this.b(g,.026,.032,.05,[.224,.11,.174],this.led,.005);
     this.plate(g,'↑',[.105,.02,.163],.082,.15,'#f2d799');
+  }
+  /** Band clamp on a long straight run, its tightening lug turned toward the floor where possible. */
+  clamp(mid,dir,metal,seal){
+    const g=new T.Group();g.position.copy(mid);g.quaternion.setFromUnitVectors(Y,dir);this.pipeGroup.add(g);
+    const down=new T.Vector3(0,-1,0).applyQuaternion(g.quaternion.clone().invert());down.y=0;if(down.lengthSq()<.01)down.set(1,0,0);down.normalize();
+    this.cyl(g,.128,.034,[0,0,0],seal,28);this.cyl(g,.133,.026,[0,0,0],metal,28);
+    const lug=new T.Group();lug.rotation.y=-Math.atan2(down.z,down.x);g.add(lug);
+    for(const t of [-.017,.017])this.b(lug,.05,.026,.009,[.152,0,t],metal,.003);
+    const bolt=this.cyl(lug,.0065,.062,[.158,0,0],this.chrome,8);bolt.rotation.x=PI/2;const n=this.nut(lug,[.158,0,.027],.012,.009);n.rotation.set(PI/2,0,0);
   }
   updateGuides(){
     disposeGroup(this.guideGroup);this.pickables=[];if(!this.state||this.demo)return;
@@ -348,7 +464,13 @@ export class CabinetScene{
     if(animateParts){for(const r of this.rotors)r.rotation.z=time*(active?1.2:.15);for(const {hand,base,value} of this.needles)hand.rotation.z=base+(active?.2*Math.sin(time*.8+value):0);}
     if(this.headRing)this.headRing.material.opacity=!animateParts?.8:.62+Math.sin(time*2.4)*.16;for(const o of this.guidePulse||[])o.scale.setScalar(!animateParts?1:1+Math.sin(time*2.4)*.1);
     if(!this.renderer.isSoftwareRenderer)this.renderer.info.reset();
-    if(this.postTarget&&this.settings.quality==='high'){this.renderer.setRenderTarget(this.postTarget);this.renderer.clear();this.renderer.render(this.scene,this.camera);this.renderer.setRenderTarget(null);this.renderer.render(this.postScene,this.postCamera);}else this.renderer.render(this.scene,this.camera);
+    if(this.postTarget&&this.settings.quality==='high'){
+      this.renderer.setRenderTarget(this.postTarget);this.renderer.clear();this.renderer.render(this.scene,this.camera);
+      const [tx,ty]=this.bloomTexel||[0,0],blur=this.blurMat.uniforms;this.postPass(this.brightMat,this.bloomA);
+      blur.image.value=this.bloomA.texture;blur.direction.value.set(tx,0);this.postPass(this.blurMat,this.bloomB);
+      blur.image.value=this.bloomB.texture;blur.direction.value.set(0,ty);this.postPass(this.blurMat,this.bloomA);
+      this.postPass(this.postMat,null);
+    }else this.renderer.render(this.scene,this.camera);
   }
   stats(){return{mode:this.renderer.isSoftwareRenderer?'software':'webgl',backend:this.renderer.isStudioRenderer?'wasm-studio':this.renderer.isSoftwareRenderer?'canvas-legacy':'webgl-pbr',fps:this.renderer.isSoftwareRenderer&&!this.onDemand?this.renderer.fps:null,renderPolicy:this.onDemand?'on-change':'continuous',revision:T.REVISION,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,geometries:this.renderer.info.memory.geometries,textures:this.renderer.info.memory.textures,canvas:{width:this.renderer.domElement.width,height:this.renderer.domElement.height},slice:this.slice,visibleEquipmentFloors:this.obstacleObjects?.filter(o=>o.group.visible).length,visibleEndpoints:this.endpointLabels?.filter(o=>o.group.visible).length,guideVisible:this.guideGroup.visible,frameMs:this.renderer.frameMs||null,rasterMs:this.renderer.rasterMs||null,contextLost:!!this.contextLost,post:!!this.postTarget&&this.settings.quality==='high'};}
   capture(){
@@ -358,5 +480,5 @@ export class CabinetScene{
     x.fillStyle='#d6dfbd';x.font=`${23*scale}px Georgia`;x.fillText('S T R A T A',30*scale,43*scale);x.fillStyle='#a3b489';x.font=`${8*scale}px monospace`;x.fillText('ATELIER 02 / THE ART OF ROUTING',31*scale,63*scale);x.fillText('THE FLOW APPARATUS',30*scale,h-34*scale);
     x.textAlign='right';x.fillText(`${this.state.level.size} × ${this.state.level.height} × ${this.state.level.size}   /   ${this.demo?'SHOWCASE':this.state.level.name}`,w-30*scale,h-34*scale);return c.toDataURL('image/png');
   }
-  dispose(){this.resizeObserver.disconnect();[this.staticGroup,this.pipeGroup,this.guideGroup].forEach(disposeGroup);this.assets.forEach(m=>m.dispose());this.geoCache.forEach(g=>g.dispose());this.normal?.dispose();this.envTarget?.dispose();this.postTarget?.dispose();this.postMat?.dispose();this.renderer.dispose();this.renderer.domElement.remove();}
+  dispose(){this.resizeObserver.disconnect();[this.staticGroup,this.pipeGroup,this.guideGroup].forEach(disposeGroup);this.assets.forEach(m=>m.dispose());this.geoCache.forEach(g=>g.dispose());this.normal?.dispose();this.brushed?.dispose();this.envTarget?.dispose();this.postTarget?.dispose();this.bloomA?.dispose();this.bloomB?.dispose();[this.postMat,this.brightMat,this.blurMat].forEach(m=>m?.dispose());this.postQuad?.geometry.dispose();this.renderer.dispose();this.renderer.domElement.remove();}
 }
